@@ -23,13 +23,13 @@ with st.form("vote_form"):
         "The Liberty and Justice Party (LJP)",
         "The New Movement (TNM)",
         "A New and United Guyana (ANUG)",
-        "Federal United Party (FEDUP)",
-        "United Party for National Growth and Development (UPNGD)",
+                "Assembly for Liberty and Prosperity (ALP)",
         "Other / Independent"
     ]
     party_choice = st.radio("If elections were held today, which party would you vote for?", parties)
     custom_party_candidate = ""
-    if party_choice == "Other / Independent":
+    if party_choice == "Assembly for Liberty and Prosperity (ALP)",
+        "Other / Independent":
         custom_party_candidate = st.text_input("Name of the independent candidate or other party representative:")
 
     age = st.selectbox("Age range (optional)", ["Prefer not to say", "18–24", "25–34", "35–44", "45–54", "55+"])
