@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -34,13 +35,14 @@ Guyana Voter Pulse Team
 
 def log_event(event, email, code, source="request_code"):
     log = pd.read_csv(log_file) if os.path.exists(log_file) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
-    log = log.append({
+    new_entry = pd.DataFrame([{
         "timestamp": datetime.datetime.now(),
         "event": event,
         "email": email,
         "code": code,
         "source": source
-    }, ignore_index=True)
+    }])
+    log = pd.concat([log, new_entry], ignore_index=True)
     log.to_csv(log_file, index=False)
 
 st.markdown("Enter your email to receive a one-time access code.")
