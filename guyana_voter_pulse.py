@@ -7,6 +7,12 @@ import os
 
 st.set_page_config(page_title="Guyana Voter Pulse", layout="centered")
 
+# Set closing date
+closing_date = datetime.date(2025, 4, 30)
+if datetime.date.today() > closing_date:
+    st.warning("🛑 This survey is now closed. Thank you for your participation!")
+    st.stop()
+
 st.title("🇬🇾 Guyana Voter Pulse")
 st.markdown("#### Indicate your voting preference anonymously")
 
