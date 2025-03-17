@@ -27,10 +27,40 @@ with st.form("vote_form"):
         "United Party for National Growth and Development (UPNGD)",
         "Other / Independent"
     ]
-    party_choice = st.radio("Which party do you currently support?", parties)
+    party_choice = st.radio("If elections were held today, which party would you vote for?", parties)
+    custom_party_candidate = ""
+    if party_choice == "Other / Independent":
+        custom_party_candidate = st.text_input("Name of the independent candidate or other party representative:")
+
     age = st.selectbox("Age range (optional)", ["Prefer not to say", "18–24", "25–34", "35–44", "45–54", "55+"])
     gender = st.selectbox("Gender (optional)", ["Prefer not to say", "Male", "Female", "Other"])
     comment = st.text_area("Why are you voting this way? (optional)")
+
+    not_voting_for = st.multiselect("Are there any parties you would NOT vote for?", parties)
+    not_vote_reason = st.text_area("Why would you not vote for the selected party/parties? (optional)")
+
+    preferred_candidate = st.text_input("Who is your preferred candidate (for President or Prime Minister)?")
+    candidate_reason = st.text_area("Why this candidate? (optional)")
+
+    diaspora = st.radio("Are you currently living in Guyana or abroad?", ["In Guyana", "Diaspora (abroad)"])
+
+    issues = st.multiselect(
+        "What are the top issues influencing your vote? (Choose up to 3)",
+        ["Jobs", "Education", "Healthcare", "Cost of living", "Crime", "Corruption", "Infrastructure", "Environmental issues", "Freedom of speech"]
+    )
+
+    ethnicity = st.selectbox("What is your ethnicity?", [
+        "Prefer not to say", "African-Guyanese", "Indo-Guyanese", "Amerindian", "Mixed", "Other"
+    ])
+
+    community = st.selectbox("Which community or group do you most identify with? (optional)", [
+        "Prefer not to say", "African-Guyanese", "Indo-Guyanese", "Amerindian", "Mixed heritage", "Portuguese", "Chinese", "Other"
+    ])
+
+    voted_last = st.radio("Did you vote in the last national election?", ["Yes", "No", "Can't remember", "Prefer not to say"])
+
+    perception = st.radio("Do you believe the upcoming election will be fair and transparent?", ["Yes", "No", "Not sure"])
+    gecom_trust = st.radio("Do you agree that the Guyana Elections Commission will deliver an electoral process of international standards?", ["Yes", "No", "Not sure"])
 
     submitted = st.form_submit_button("Submit Vote")
 
@@ -39,9 +69,21 @@ with st.form("vote_form"):
             "Timestamp": datetime.datetime.now(),
             "Region": region,
             "Party": party_choice,
+            "Independent Candidate (if any)": custom_party_candidate,
             "Age": age,
             "Gender": gender,
-            "Comment": comment
+            "Comment": comment,
+            "Not Voting For": ", ".join(not_voting_for),
+            "Reason for Not Voting": not_vote_reason,
+            "Preferred Candidate": preferred_candidate,
+            "Candidate Reason": candidate_reason,
+            "Diaspora": diaspora,
+            "Top Issues": ", ".join(issues),
+            "Ethnicity": ethnicity,
+            "Community": community,
+            "Voted Last Election": voted_last,
+            "Perception of Fairness": perception,
+            "Trust in GECOM (International Standards)": gecom_trust
         }
 
         if os.path.exists("votes.csv"):
