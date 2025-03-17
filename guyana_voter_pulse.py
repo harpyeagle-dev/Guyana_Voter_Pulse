@@ -1,162 +1,101 @@
-
 import streamlit as st
 import pandas as pd
 import datetime
 import plotly.express as px
 import os
 
-# --------------------------
-# ONE-TIME CODE VALIDATION
-# --------------------------
-CODES_FILE = "valid_codes.csv"
-
-def load_codes():
-    if os.path.exists(CODES_FILE):
-        return pd.read_csv(CODES_FILE)
-    else:
-        return pd.DataFrame(columns=["code", "used"])
-
-def save_codes(df):
-    df.to_csv(CODES_FILE, index=False)
-
-def validate_code(user_code):
-    codes_df = load_codes()
-    match = codes_df[(codes_df["code"] == user_code) & (codes_df["used"] == False)]
-    if not match.empty:
-        codes_df.loc[codes_df["code"] == user_code, "used"] = True
-        save_codes(codes_df)
-        return True
-    return False
-
-# --------------------------
-# CLOSE DATE CHECK
-# --------------------------
-closing_date = datetime.date(2025, 4, 30)
-if datetime.date.today() > closing_date:
-    st.warning("🛑 This survey is now closed. Thank you for your participation!")
-    st.stop()
-
-st.set_page_config(page_title="Guyana Voter Pulse", layout="centered")
+st.set_page_config(page_title="Guyana Voter Pulse", layout="wide")
 st.title("🇬🇾 Guyana Voter Pulse")
-st.markdown("#### Use your access code to vote anonymously")
 
-# CODE ENTRY
-st.info("You must enter a valid access code to continue. Each code can only be used once.")
-user_code = st.text_input("Enter your one-time access code:")
+codes_file = "valid_codes.csv"
+log_file = "usage_log.csv"
+votes_file = "votes.csv"
 
-if user_code:
-    if validate_code(user_code.strip()):
-        st.success("✅ Code accepted. You may now vote.")
-    else:
-        st.error("❌ Invalid or already used code.")
+def log_event(event, email, code, source="voter_app"):
+    log = pd.read_csv(log_file) if os.path.exists(log_file) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
+    log = log.append({
+        "timestamp": datetime.datetime.now(),
+        "event": event,
+        "email": email,
+        "code": code,
+        "source": source
+    }, ignore_index=True)
+    log.to_csv(log_file, index=False)
+
+code = st.text_input("Enter your access code")
+
+if code:
+    codes = pd.read_csv(codes_file)
+    code_row = codes[codes["code"] == code]
+
+    if code_row.empty:
+        st.error("Invalid code.")
         st.stop()
-else:
-    st.stop()
+    elif code_row.iloc[0]["used"]:
+        st.warning("This code has already been used.")
+        st.stop()
+    else:
+        st.success("✅ Code accepted. Please cast your vote.")
 
-# --------------------------
-# VOTING FORM BEGINS
-# --------------------------
-with st.form("vote_form"):
-    region = st.selectbox("Select your Region", [f"Region {i}" for i in range(1, 11)])
-    parties = [
-        "People's Progressive Party (PPP)",
-        "A Partnership for National Unity (APNU)",
-        "Alliance For Change (AFC)",
-        "The United Republican Party (URP)",
-        "The Liberty and Justice Party (LJP)",
-        "The New Movement (TNM)",
-        "A New and United Guyana (ANUG)",
-        "Assembly for Liberty and Prosperity (ALP)",
-        "Other / Independent"
-    ]
-    party_choice = st.radio("If elections were held today, which party would you vote for?", parties)
-    custom_party_candidate = ""
-    if party_choice == "Assembly for Liberty and Prosperity (ALP)":
-        custom_party_candidate = st.text_input("Name of the ALP candidate (if known):")
-    if party_choice == "Other / Independent":
-        custom_party_candidate = st.text_input("Name of the independent candidate or other party representative:")
+        with st.form("vote_form"):
+            region = st.selectbox("Region", [f"Region {i}" for i in range(1, 11)])
+            party = st.selectbox("Party", ["-- Select a Party --", "PPP", "APNU", "AFC", "LJP", "URP", "TNM", "ANUG", "ALP", "Other"], index=0)
+            age = st.selectbox("Age", ["18–24", "25–34", "35–44", "45–54", "55+"])
+            gender = st.radio("Gender", ["Male", "Female", "Other"])
+            diaspora = st.radio("Where do you live?", ["In Guyana", "Diaspora"])
+            issues = st.multiselect("Top Issues", ["Jobs", "Education", "Healthcare", "Cost of living", "Crime", "Corruption", "Infrastructure"])
+            fair = st.radio("Do you believe the election will be fair?", ["Yes", "No", "Not sure"])
+            gecom = st.radio("Trust in GECOM?", ["Yes", "No", "Not sure"])
+            submit = st.form_submit_button("Submit Vote")
 
-    age = st.selectbox("Age range (optional)", ["Prefer not to say", "18–24", "25–34", "35–44", "45–54", "55+"])
-    gender = st.selectbox("Gender (optional)", ["Prefer not to say", "Male", "Female", "Other"])
-    comment = st.text_area("Why are you voting this way? (optional)")
+        if submit:
+            vote = pd.DataFrame([{
+                "Timestamp": datetime.datetime.now(),
+                "Code": code,
+                "Region": region,
+                "Party": party,
+                "Age": age,
+                "Gender": gender,
+                "Diaspora": diaspora,
+                "Top Issues": ", ".join(issues),
+                "Fairness": fair,
+                "GECOM Trust": gecom
+            }])
+            if os.path.exists(votes_file):
+                votes = pd.read_csv(votes_file)
+                votes = votes.append(vote, ignore_index=True)
+            else:
+                votes = vote
+            votes.to_csv(votes_file, index=False)
+            codes.loc[codes["code"] == code, "used"] = True
+            codes.to_csv(codes_file, index=False)
+            log_event("vote_cast", "", code)
+            st.success("✅ Your vote has been recorded.")
 
-    not_voting_for = st.multiselect("Are there any parties you would NOT vote for?", parties)
-    not_vote_reason = st.text_area("Why would you not vote for the selected party/parties? (optional)")
+# Show visualizations
+if os.path.exists(votes_file):
+    data = pd.read_csv(votes_file)
+    st.subheader("📊 Voting Trends")
 
-    preferred_candidate = st.text_input("Who is your preferred candidate (for President or Prime Minister)?")
-    candidate_reason = st.text_area("Why this candidate? (optional)")
-
-    diaspora = st.radio("Are you currently living in Guyana or abroad?", ["In Guyana", "Diaspora (abroad)"])
-
-    issues = st.multiselect(
-        "What are the top issues influencing your vote? (Choose up to 3)",
-        ["Jobs", "Education", "Healthcare", "Cost of living", "Crime", "Corruption", "Infrastructure", "Environmental issues", "Freedom of speech"]
-    )
-
-    ethnicity = st.selectbox("What is your ethnicity?", [
-        "Prefer not to say", "African-Guyanese", "Indo-Guyanese", "Amerindian", "Mixed", "Other"
-    ])
-
-    community = st.selectbox("Which community or group do you most identify with? (optional)", [
-        "Prefer not to say", "African-Guyanese", "Indo-Guyanese", "Amerindian", "Mixed heritage", "Portuguese", "Chinese", "Other"
-    ])
-
-    voted_last = st.radio("Did you vote in the last national election?", ["Yes", "No", "Can't remember", "Prefer not to say"])
-
-    perception = st.radio("Do you believe the upcoming election will be fair and transparent?", ["Yes", "No", "Not sure"])
-    gecom_trust = st.radio("Do you agree that the Guyana Elections Commission will deliver an electoral process of international standards?", ["Yes", "No", "Not sure"])
-
-    submitted = st.form_submit_button("Submit Vote")
-
-    if submitted:
-        new_vote = {
-            "Timestamp": datetime.datetime.now(),
-            "Access Code": user_code,
-            "Region": region,
-            "Party": party_choice,
-            "Independent Candidate (if any)": custom_party_candidate,
-            "Age": age,
-            "Gender": gender,
-            "Comment": comment,
-            "Not Voting For": ", ".join(not_voting_for),
-            "Reason for Not Voting": not_vote_reason,
-            "Preferred Candidate": preferred_candidate,
-            "Candidate Reason": candidate_reason,
-            "Diaspora": diaspora,
-            "Top Issues": ", ".join(issues),
-            "Ethnicity": ethnicity,
-            "Community": community,
-            "Voted Last Election": voted_last,
-            "Perception of Fairness": perception,
-            "Trust in GECOM (International Standards)": gecom_trust
-        }
-
-        if os.path.exists("votes.csv"):
-            df = pd.read_csv("votes.csv")
-            df = df.append(new_vote, ignore_index=True)
-        else:
-            df = pd.DataFrame([new_vote])
-
-        df.to_csv("votes.csv", index=False)
-        st.success("✅ Your vote has been recorded anonymously!")
-
-# --------------------------
-# Visualization
-# --------------------------
-st.markdown("## 📊 Live Results (based on submitted votes)")
-if os.path.exists("votes.csv"):
-    data = pd.read_csv("votes.csv")
-    count_by_party = data["Party"].value_counts().reset_index()
-    count_by_party.columns = ["Party", "Votes"]
-    fig = px.bar(count_by_party, x="Party", y="Votes", color="Party", title="Voting Preferences")
-    st.plotly_chart(fig, use_container_width=True)
-
-    if st.checkbox("Show region-wise breakdown"):
-        region_filter = st.selectbox("Choose a Region", sorted(data["Region"].unique()))
-        filtered = data[data["Region"] == region_filter]
-        party_counts = filtered["Party"].value_counts().reset_index()
-        party_counts.columns = ["Party", "Votes"]
-        fig2 = px.pie(party_counts, names="Party", values="Votes", title=f"Votes in {region_filter}")
+    col1, col2 = st.columns(2)
+    with col1:
+        fig1 = px.bar(data["Party"].value_counts().reset_index(), x="index", y="Party", labels={"index": "Party", "Party": "Votes"}, title="Party Preferences")
+        st.plotly_chart(fig1, use_container_width=True)
+    with col2:
+        fig2 = px.pie(data, names="Region", title="Votes by Region")
         st.plotly_chart(fig2, use_container_width=True)
-else:
-    st.info("No votes recorded yet. Be the first to participate!")
+
+    col3, col4 = st.columns(2)
+    with col3:
+        fig3 = px.pie(data, names="Age", title="Voter Age Groups")
+        st.plotly_chart(fig3, use_container_width=True)
+    with col4:
+        fig4 = px.pie(data, names="Gender", title="Gender Distribution")
+        st.plotly_chart(fig4, use_container_width=True)
+
+    st.subheader("🧠 Perceptions")
+    col5, col6 = st.columns(2)
+    with col5:
+        st.plotly_chart(px.pie(data, names="Fairness", title="Perceived Election Fairness"), use_container_width=True)
+    with col6:
+        st.plotly_chart(px.pie(data, names="GECOM Trust", title="Trust in GECOM"), use_container_width=True)

@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import datetime
@@ -9,27 +8,11 @@ import os
 st.set_page_config(page_title="Request Voter Access Code", layout="centered")
 st.title("📬 Request Your One-Time Voting Code")
 
-# Load email credentials securely
 EMAIL_ADDRESS = st.secrets["EMAIL"]["address"]
 EMAIL_PASSWORD = st.secrets["EMAIL"]["password"]
 
-CODES_FILE = "valid_codes.csv"
-ISSUED_FILE = "issued_codes.csv"
-
-def load_codes():
-    if os.path.exists(CODES_FILE):
-        return pd.read_csv(CODES_FILE)
-    else:
-        return pd.DataFrame(columns=["code", "used"])
-
-def load_issued():
-    if os.path.exists(ISSUED_FILE):
-        return pd.read_csv(ISSUED_FILE)
-    else:
-        return pd.DataFrame(columns=["email", "code", "timestamp"])
-
-def save_issued(df):
-    df.to_csv(ISSUED_FILE, index=False)
+codes_file = "valid_codes.csv"
+log_file = "usage_log.csv"
 
 def send_email(to_email, code):
     subject = "Your Guyana Voter Access Code"
@@ -37,7 +20,7 @@ def send_email(to_email, code):
 
 Your one-time access code is: {code}
 
-Please visit the voting platform and enter this code to cast your vote. This code can only be used once.
+Please visit the voting platform and enter this code to cast your vote.
 
 Guyana Voter Pulse Team
 """
@@ -45,46 +28,47 @@ Guyana Voter Pulse Team
     msg["Subject"] = subject
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = to_email
-
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         server.send_message(msg)
 
-# App logic
-st.markdown("Enter your email address to receive your one-time access code for the Guyana Voter Pulse platform.")
+def log_event(event, email, code, source="request_code"):
+    log = pd.read_csv(log_file) if os.path.exists(log_file) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
+    log = log.append({
+        "timestamp": datetime.datetime.now(),
+        "event": event,
+        "email": email,
+        "code": code,
+        "source": source
+    }, ignore_index=True)
+    log.to_csv(log_file, index=False)
 
-user_email = st.text_input("Your Email Address")
+st.markdown("Enter your email to receive a one-time access code.")
 
-if st.button("Request Access Code"):
-    if not user_email or "@" not in user_email:
+email = st.text_input("Email address")
+
+if st.button("Request Code"):
+    if not email or "@" not in email:
         st.error("Please enter a valid email address.")
     else:
-        codes_df = load_codes()
-        issued_df = load_issued()
+        codes = pd.read_csv(codes_file)
+        issued = codes[codes["issued"] == True]
+        already_issued = pd.read_csv(log_file) if os.path.exists(log_file) else pd.DataFrame()
 
-        # Check if already issued
-        if user_email in issued_df["email"].values:
-            code_row = issued_df[issued_df["email"] == user_email]
-            existing_code = code_row["code"].values[0]
-            st.info(f"A code was already sent to this email: {existing_code}")
+        if email in already_issued["email"].values:
+            code = already_issued[already_issued["email"] == email]["code"].values[0]
+            st.info(f"A code has already been issued to this email: {code}")
         else:
-            available_codes = codes_df[codes_df["used"] == False]
-            if available_codes.empty:
-                st.error("No available codes at the moment. Please try again later.")
+            unused = codes[codes["issued"] == False]
+            if unused.empty:
+                st.error("No codes left to issue.")
             else:
-                new_code = available_codes.iloc[0]["code"]
-                codes_df.loc[codes_df["code"] == new_code, "used"] = True
-                codes_df.to_csv(CODES_FILE, index=False)
-
-                issued_df = issued_df.append({
-                    "email": user_email,
-                    "code": new_code,
-                    "timestamp": datetime.datetime.now()
-                }, ignore_index=True)
-                save_issued(issued_df)
-
+                code = unused.iloc[0]["code"]
+                codes.loc[codes["code"] == code, "issued"] = True
+                codes.to_csv(codes_file, index=False)
+                log_event("code_issued", email, code)
                 try:
-                    send_email(user_email, new_code)
-                    st.success(f"Access code sent to {user_email}. Check your inbox!")
+                    send_email(email, code)
+                    st.success(f"Code sent to {email}")
                 except Exception as e:
-                    st.error(f"Failed to send email: {e}")
+                    st.error(f"Error sending email: {e}")
