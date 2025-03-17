@@ -5,20 +5,57 @@ import datetime
 import plotly.express as px
 import os
 
-st.set_page_config(page_title="Guyana Voter Pulse", layout="centered")
+# --------------------------
+# ONE-TIME CODE VALIDATION
+# --------------------------
+CODES_FILE = "valid_codes.csv"
 
-# Set closing date
+def load_codes():
+    if os.path.exists(CODES_FILE):
+        return pd.read_csv(CODES_FILE)
+    else:
+        return pd.DataFrame(columns=["code", "used"])
+
+def save_codes(df):
+    df.to_csv(CODES_FILE, index=False)
+
+def validate_code(user_code):
+    codes_df = load_codes()
+    match = codes_df[(codes_df["code"] == user_code) & (codes_df["used"] == False)]
+    if not match.empty:
+        codes_df.loc[codes_df["code"] == user_code, "used"] = True
+        save_codes(codes_df)
+        return True
+    return False
+
+# --------------------------
+# CLOSE DATE CHECK
+# --------------------------
 closing_date = datetime.date(2025, 4, 30)
 if datetime.date.today() > closing_date:
     st.warning("🛑 This survey is now closed. Thank you for your participation!")
     st.stop()
 
+st.set_page_config(page_title="Guyana Voter Pulse", layout="centered")
 st.title("🇬🇾 Guyana Voter Pulse")
-st.markdown("#### Indicate your voting preference anonymously")
+st.markdown("#### Use your access code to vote anonymously")
 
-st.info("🔒 This is **not an official vote**. This platform is for civic engagement and research only. All entries are strictly confidential.")
+# CODE ENTRY
+st.info("You must enter a valid access code to continue. Each code can only be used once.")
+user_code = st.text_input("Enter your one-time access code:")
 
-# Form
+if user_code:
+    if validate_code(user_code.strip()):
+        st.success("✅ Code accepted. You may now vote.")
+    else:
+        st.error("❌ Invalid or already used code.")
+        st.stop()
+else:
+    st.stop()
+
+# --------------------------
+# VOTING FORM BEGINS
+# --------------------------
 with st.form("vote_form"):
     region = st.selectbox("Select your Region", [f"Region {i}" for i in range(1, 11)])
     parties = [
@@ -74,6 +111,7 @@ with st.form("vote_form"):
     if submitted:
         new_vote = {
             "Timestamp": datetime.datetime.now(),
+            "Access Code": user_code,
             "Region": region,
             "Party": party_choice,
             "Independent Candidate (if any)": custom_party_candidate,
@@ -102,7 +140,9 @@ with st.form("vote_form"):
         df.to_csv("votes.csv", index=False)
         st.success("✅ Your vote has been recorded anonymously!")
 
-# Show results
+# --------------------------
+# Visualization
+# --------------------------
 st.markdown("## 📊 Live Results (based on submitted votes)")
 if os.path.exists("votes.csv"):
     data = pd.read_csv("votes.csv")
