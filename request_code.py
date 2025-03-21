@@ -51,46 +51,47 @@ if st.session_state.step == 1:
         submit = st.form_submit_button("Send Code")
 
     if submit:
-        if "@" not in email or "." not in email:
-            st.error("Please enter a valid email address.")
-        else:
-            try:
-                codes = pd.read_csv(CODES_FILE)
+    if "@" not in email or "." not in email:
+        st.error("Please enter a valid email address.")
+    else:
+        try:
+            log = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
 
-                # Select an unused code
-                unused = codes[codes["issued"] == False]
-                if unused.empty:
-                    st.error("No more codes available.")
-                    st.stop()
+            # ✅ Block duplicate email requests
+            if email in log["email"].values:
+                st.warning("A code has already been issued to this email address.")
+                st.stop()
 
-                code = unused.iloc[0]["code"]
+            codes = pd.read_csv(CODES_FILE)
+            unused = codes[codes["issued"] == False]
 
-                # Mark code as issued
-                codes.loc[codes["code"] == code, "issued"] = True
-                codes.to_csv(CODES_FILE, index=False)
+            if unused.empty:
+                st.error("No more codes available.")
+                st.stop()
 
-                # Send code via email
-                send_email(email, code)
+            code = unused.iloc[0]["code"]
 
-                # Log the code issue
-                log = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
-                log = pd.concat([log, pd.DataFrame([{
-                    "timestamp": datetime.datetime.now(),
-                    "event": "code_issued",
-                    "email": email,
-                    "code": code,
-                    "source": "app"
-                }])], ignore_index=True)
-                log.to_csv(LOG_FILE, index=False)
+            codes.loc[codes["code"] == code, "issued"] = True
+            codes.to_csv(CODES_FILE, index=False)
 
-                # Store session and move to step 2
-                st.session_state.email = email
-                st.session_state.step = 2
-                st.rerun()
+            send_email(email, code)
 
-            except Exception as e:
-                st.error(f"Something went wrong: {str(e)}")
+            log = pd.concat([log, pd.DataFrame([{
+                "timestamp": datetime.datetime.now(),
+                "event": "code_issued",
+                "email": email,
+                "code": code,
+                "source": "app"
+            }])], ignore_index=True)
+            log.to_csv(LOG_FILE, index=False)
 
+            st.session_state.email = email
+            st.session_state.step = 2
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"Something went wrong: {str(e)}")
+            
 # --- Step 2: Verify Access Code ---
 elif st.session_state.step == 2:
     st.subheader("🗳️ Step 2: Enter Access Code")
