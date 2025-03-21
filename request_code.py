@@ -91,23 +91,36 @@ if st.session_state.step == 1:
             except Exception as e:
                 st.error(f"Something went wrong: {str(e)}")
 
-# --- Step 2: Verify Code ---
+# --- Step 2: Verify Access Code ---
 elif st.session_state.step == 2:
     st.subheader("🗳️ Step 2: Enter Access Code")
+
     with st.form("verify_form"):
         code_input = st.text_input("Enter the code sent to your email")
-        verify = st.form_submit_button("Verify Code")
-    if verify:
+        check = st.form_submit_button("Verify Code")
+
+    if check:
         codes = pd.read_csv(CODES_FILE)
-        row = codes[codes["code"] == code_input]
-        if row.empty:
-            st.error("Invalid code.")
-        elif row.iloc[0]["used"]:
-            st.warning("This code has already been used.")
+
+        # DEBUG: Show entered code and available codes
+        st.write("🔍 You entered:", code_input)
+        st.write("📄 Codes in file:", codes["code"].tolist())
+
+        # Clean up input for comparison
+        entered = code_input.strip()
+
+        if entered in codes["code"].values:
+            match = codes[codes["code"] == entered].iloc[0]
+
+            if match["used"]:
+                st.warning("This code has already been used.")
+            else:
+                st.session_state.code = entered
+                st.success("✅ Code verified.")
+                st.session_state.step = 3
+                st.rerun()
         else:
-            st.session_state.code = code_input
-            st.session_state.step = 3
-            st.experimental_rerun()
+            st.error("❌ Invalid code. Please check and try again.")
 
 # --- Step 3: Vote Form ---
 elif st.session_state.step == 3:
