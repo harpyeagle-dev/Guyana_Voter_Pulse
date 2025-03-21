@@ -150,7 +150,8 @@ elif st.session_state.step == 4:
                 st.plotly_chart(px.pie(data, names="Age", title="Age Breakdown"), use_container_width=True)
             with col4:
                 st.plotly_chart(px.pie(data, names="Gender", title="Gender Breakdown"), use_container_width=True)
-                        col5, col6 = st.columns(2)
+                        
+            col5, col6 = st.columns(2)
             with col5:
                 st.plotly_chart(px.pie(data, names="Fairness", title="Perceived Fairness"), use_container_width=True)
             with col6:
