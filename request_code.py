@@ -32,7 +32,7 @@ if "pending_vote" not in st.session_state:
 # Helpers
 def send_email(to_email, code):
     subject = "Your Guyana Voter Access Code"
-    body = f\"""Your one-time access code is: {code}
+    body = f"""Your one-time access code is: {code}
 
 Use this code to cast your vote.
 
