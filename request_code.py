@@ -106,8 +106,8 @@ elif st.session_state.step == 2:
         st.write("🔍 You entered:", code_input)
         st.write("📄 Codes in file:", codes["code"].tolist())
 
-        # Clean up input for comparison
-        entered = code_input.strip()
+        # Strip input safely
+        entered = code_input.strip() if code_input else ""
 
         if entered in codes["code"].values:
             match = codes[codes["code"] == entered].iloc[0]
