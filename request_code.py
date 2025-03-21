@@ -86,7 +86,7 @@ if st.session_state.step == 1:
                 # Store session and move to step 2
                 st.session_state.email = email
                 st.session_state.step = 2
-                st.experimental_rerun()
+                st.rerun()
 
             except Exception as e:
                 st.error(f"Something went wrong: {str(e)}")
@@ -149,7 +149,7 @@ elif st.session_state.step == 3:
             codes.loc[codes["code"] == st.session_state.code, "used"] = True
             codes.to_csv(CODES_FILE, index=False)
             st.session_state.step = 4
-            st.experimental_rerun()
+            st.rerun()
 
 # --- Step 4: Results ---
 elif st.session_state.step == 4:
