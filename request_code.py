@@ -151,4 +151,4 @@ elif st.session_state.step == 4:
             with col4:
                 st.plotly_chart(px.pie(data, names="Gender", title="Gender Breakdown"), use_container_width=True)
     except:
-        st.error("No vote data available yet.")# Full logic to be added.
+        st.error("No vote data available yet.")
