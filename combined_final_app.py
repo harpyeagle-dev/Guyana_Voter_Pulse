@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import datetime
@@ -7,9 +6,9 @@ from email.mime.text import MIMEText
 import plotly.express as px
 import os
 
-# --- Config ---
+# Setup
 st.set_page_config(page_title="Guyana Voter Pulse", layout="wide")
-st.title("🇬🇾 Guyana Voter Pulse – Request & Vote")
+st.title("🇬🇾 Guyana Voter Pulse")
 
 EMAIL_ADDRESS = st.secrets["EMAIL"]["address"]
 EMAIL_PASSWORD = st.secrets["EMAIL"]["password"]
@@ -18,25 +17,25 @@ CODES_FILE = "valid_codes.csv"
 LOG_FILE = "usage_log.csv"
 VOTES_FILE = "votes.csv"
 
-# --- Session Init ---
+# Session state
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "email" not in st.session_state:
     st.session_state.email = ""
 if "code" not in st.session_state:
     st.session_state.code = ""
-if "pending_vote" not in st.session_state:
-    st.session_state.pending_vote = None
+if "pending_action" not in st.session_state:
+    st.session_state.pending_action = None
 
-# --- Email Sender ---
+# Helpers
 def send_email(to_email, code):
     subject = "Your Guyana Voter Access Code"
-    body = f"""Your one-time access code is: {code}
+    body = f\"""Your one-time access code is: {code}
 
 Use this code to cast your vote.
 
 Guyana Voter Pulse Team
-"""
+\"""
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = EMAIL_ADDRESS
@@ -45,70 +44,82 @@ Guyana Voter Pulse Team
         server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
         server.send_message(msg)
 
-def log_event(event, email, code, source="app"):
+# Handle pending actions from previous step
+if st.session_state.pending_action == "save_code":
+    email = st.session_state.email
+    codes = pd.read_csv(CODES_FILE)
     log = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) else pd.DataFrame(columns=["timestamp", "event", "email", "code", "source"])
-    new_entry = pd.DataFrame([{
-        "timestamp": datetime.datetime.now(),
-        "event": event,
-        "email": email,
-        "code": code,
-        "source": source
-    }])
-    log = pd.concat([log, new_entry], ignore_index=True)
-    log.to_csv(LOG_FILE, index=False)
 
-# --- Step 1: Request Code ---
+    if not log[log["email"] == email].empty:
+        code = log[log["email"] == email]["code"].values[0]
+    else:
+        unused = codes[codes["issued"] == False]
+        code = unused.iloc[0]["code"]
+        codes.loc[codes["code"] == code, "issued"] = True
+        codes.to_csv(CODES_FILE, index=False)
+        log = pd.concat([log, pd.DataFrame([{
+            "timestamp": datetime.datetime.now(),
+            "event": "code_issued",
+            "email": email,
+            "code": code,
+            "source": "app"
+        }])], ignore_index=True)
+        log.to_csv(LOG_FILE, index=False)
+        send_email(email, code)
+
+    st.session_state.pending_action = None
+    st.session_state.step = 2
+    st.experimental_rerun()
+
+if st.session_state.pending_action == "save_vote":
+    vote_data = st.session_state.pending_vote
+    vote_df = pd.DataFrame([vote_data])
+    if os.path.exists(VOTES_FILE) and os.path.getsize(VOTES_FILE) > 0:
+        existing = pd.read_csv(VOTES_FILE)
+    else:
+        existing = pd.DataFrame(columns=vote_df.columns)
+    pd.concat([existing, vote_df], ignore_index=True).to_csv(VOTES_FILE, index=False)
+    codes = pd.read_csv(CODES_FILE)
+    codes.loc[codes["code"] == vote_data["Code"], "used"] = True
+    codes.to_csv(CODES_FILE, index=False)
+
+    st.session_state.pending_action = None
+    st.session_state.pending_vote = None
+    st.session_state.step = 4
+    st.experimental_rerun()
+
+# Step 1: Request Code
 if st.session_state.step == 1:
-    with st.form("request_form"):
+    with st.form("request_code"):
         st.subheader("📬 Step 1: Request Access Code")
         email = st.text_input("Enter your email")
-        send = st.form_submit_button("Send Code")
+        send = st.form_submit_button("Send Access Code")
     if send:
-        if "@" not in email:
-            st.error("Enter a valid email.")
-        else:
-            codes = pd.read_csv(CODES_FILE)
-            existing_log = pd.read_csv(LOG_FILE) if os.path.exists(LOG_FILE) else pd.DataFrame()
-            existing = existing_log[existing_log["email"] == email]
-            if not existing.empty:
-                code = existing["code"].values[0]
-            else:
-                unused = codes[codes["issued"] == False]
-                if unused.empty:
-                    st.error("No codes available.")
-                    st.stop()
-                code = unused.iloc[0]["code"]
-                codes.loc[codes["code"] == code, "issued"] = True
-                codes.to_csv(CODES_FILE, index=False)
-                log_event("code_issued", email, code)
-                send_email(email, code)
-            st.success(f"Access code sent to {email}")
-            st.session_state.email = email
-            st.session_state.step = 2
-            st.experimental_rerun()
+        st.session_state.email = email
+        st.session_state.pending_action = "save_code"
+        st.experimental_rerun()
 
-# --- Step 2: Enter Code ---
+# Step 2: Enter Code
 elif st.session_state.step == 2:
     st.subheader("🗳️ Step 2: Enter Access Code")
-    st.info(f"Code was sent to: {st.session_state.email}")
-    with st.form("code_form"):
-        code_input = st.text_input("Enter your code")
-        validate = st.form_submit_button("Verify Code")
-    if validate:
+    with st.form("enter_code"):
+        code_input = st.text_input("Enter the code sent to your email")
+        submit = st.form_submit_button("Validate Code")
+    if submit:
         codes = pd.read_csv(CODES_FILE)
-        row = codes[codes["code"] == code_input]
-        if row.empty:
+        match = codes[codes["code"] == code_input]
+        if match.empty:
             st.error("Invalid code.")
-        elif row.iloc[0]["used"]:
-            st.warning("This code has already been used.")
+        elif match.iloc[0]["used"]:
+            st.warning("Code has already been used.")
         else:
             st.session_state.code = code_input
             st.session_state.step = 3
             st.experimental_rerun()
 
-# --- Step 3: Vote ---
+# Step 3: Vote
 elif st.session_state.step == 3:
-    st.success("✅ Code verified. You may now vote.")
+    st.success("Code validated. You may now vote.")
     with st.form("vote_form"):
         region = st.selectbox("Region", [f"Region {i}" for i in range(1, 11)])
         party = st.selectbox("Party", ["PPP", "APNU", "AFC", "LJP", "URP", "TNM", "ANUG", "ALP", "GAP", "Other"])
@@ -120,9 +131,8 @@ elif st.session_state.step == 3:
         issues = st.multiselect("Top 3 issues", ["Jobs", "Education", "Healthcare", "Cost of living", "Crime", "Corruption", "Infrastructure"])
         fair = st.radio("Do you believe the election will be fair?", ["Yes", "No", "Not sure"])
         gecom = st.radio("Do you trust GECOM?", ["Yes", "No", "Not sure"])
-        submit = st.form_submit_button("Submit Vote")
-
-    if submit:
+        vote = st.form_submit_button("Submit Vote")
+    if vote:
         if len(issues) > 3:
             st.error("Please select no more than 3 issues.")
         else:
@@ -140,53 +150,19 @@ elif st.session_state.step == 3:
                 "Fairness": fair,
                 "GECOM Trust": gecom
             }
-            st.session_state.step = 4
+            st.session_state.pending_action = "save_vote"
             st.experimental_rerun()
 
-# --- Step 4: Save and Show Results ---
+# Step 4: Show Results
 elif st.session_state.step == 4:
-    if st.session_state.pending_vote:
-        vote_df = pd.DataFrame([st.session_state.pending_vote])
-        if os.path.exists(VOTES_FILE) and os.path.getsize(VOTES_FILE) > 0:
-            existing_votes = pd.read_csv(VOTES_FILE)
-        else:
-            existing_votes = pd.DataFrame(columns=vote_df.columns)
-        all_votes = pd.concat([existing_votes, vote_df], ignore_index=True)
-        all_votes.to_csv(VOTES_FILE, index=False)
-
-        codes = pd.read_csv(CODES_FILE)
-        codes.loc[codes["code"] == st.session_state.code, "used"] = True
-        codes.to_csv(CODES_FILE, index=False)
-
-        log_event("vote_cast", st.session_state.email, st.session_state.code)
-        st.session_state.pending_vote = None
-        st.success("✅ Your vote has been recorded.")
-
     st.subheader("📊 Voting Summary")
     try:
-        data = pd.read_csv(VOTES_FILE)
-    except pd.errors.EmptyDataError:
-        data = pd.DataFrame(columns=[
-            "Timestamp", "Code", "Region", "Party", "Preferred Candidate", "Candidate Reason",
-            "Age", "Gender", "Diaspora", "Top Issues", "Fairness", "GECOM Trust"
-        ])
-
-    if not data.empty:
+        df = pd.read_csv(VOTES_FILE)
+    except:
+        df = pd.DataFrame()
+    if not df.empty:
         col1, col2 = st.columns(2)
         with col1:
-            st.plotly_chart(px.bar(data["Party"].value_counts().reset_index(), x="index", y="Party", title="Party Preferences"), use_container_width=True)
+            st.plotly_chart(px.bar(df["Party"].value_counts().reset_index(), x="index", y="Party", title="Party Preferences"), use_container_width=True)
         with col2:
-            st.plotly_chart(px.pie(data, names="Region", title="Votes by Region"), use_container_width=True)
-
-        col3, col4 = st.columns(2)
-        with col3:
-            st.plotly_chart(px.pie(data, names="Age", title="Age Breakdown"), use_container_width=True)
-        with col4:
-            st.plotly_chart(px.pie(data, names="Gender", title="Gender Breakdown"), use_container_width=True)
-
-        st.write("### Perception of Fairness & Trust in GECOM")
-        col5, col6 = st.columns(2)
-        with col5:
-            st.plotly_chart(px.pie(data, names="Fairness", title="Perceived Fairness"), use_container_width=True)
-        with col6:
-            st.plotly_chart(px.pie(data, names="GECOM Trust", title="Trust in GECOM"), use_container_width=True)
+            st.plotly_chart(px.pie(df, names="Region", title="Votes by Region"), use_container_width=True)
